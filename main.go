@@ -2,26 +2,37 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/mbyd916/rtchat/pkg/websocket"
 )
 
-func serveWs(w http.ResponseWriter, r *http.Request) {
+func serveWs(p *websocket.Pool, w http.ResponseWriter, r *http.Request) {
+	log.Println("websocket endpoint hit")
 
-	ws, err := websocket.Upgrade(w, r)
+	conn, err := websocket.Upgrade(w, r)
 	if err != nil {
 		fmt.Fprintf(w, "%v\n", err)
 		return
 	}
 
-	go websocket.Writer(ws)
+	c := &websocket.Client{
+		Conn: conn,
+		Pool: p,
+	}
 
-	websocket.Reader(ws)
+	p.Register <- c
+	c.Read()
 }
 
 func setupRoutes() {
-	http.HandleFunc("/ws", serveWs)
+	p := websocket.NewPool()
+	go p.Start()
+
+	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		serveWs(p, w, r)
+	})
 }
 
 func main() {
